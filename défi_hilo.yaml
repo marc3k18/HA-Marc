@@ -1,0 +1,207 @@
+## 🌟 Défi Hilo 🌟
+{% set next_event = state_attr('sensor.defi_hilo', 'next_events')[0] if state_attr('sensor.defi_hilo', 'next_events') else None %}
+{% set total_events = state_attr('sensor.defi_hilo', 'next_events') | length if state_attr('sensor.defi_hilo', 'next_events') else 0 %}
+{% set last_update = as_timestamp(next_event['last_update']) if next_event and next_event['last_update'] else None %}
+{% set now = as_timestamp(now()) %}
+{% set elapsed_seconds = (now - last_update) if last_update else None %}
+
+{% if elapsed_seconds %}
+  {% if elapsed_seconds < 60 %}
+    {% set elapsed = elapsed_seconds | round(0) ~ " secondes" %}
+  {% elif elapsed_seconds < 3600 %}
+    {% set elapsed = (elapsed_seconds // 60) | round(0) ~ " minutes" %}
+  {% elif elapsed_seconds < 86400 %}
+    {% set elapsed = (elapsed_seconds // 3600) | round(0) ~ " heures" %}
+  {% else %}
+    {% set elapsed = (elapsed_seconds // 86400) | round(0) ~ " jours" %}
+  {% endif %}
+{% else %}
+  {% set elapsed = "Non disponible" %}
+{% endif %}
+
+
+  ### {% if next_event %}{% if states('sensor.defi_hilo') == 'scheduled' %}Prochain Défi{% elif states('sensor.defi_hilo') == 'off' %}Aucun défi planifié{% else %}Défi en cours{% endif %} :
+  - **🆔 ID de l'événement :** {{ next_event['event_id'] or 'Inconnu' }}
+  - **📋 Nombre de défis planifiés :** {{ total_events }}
+  - **📅 Prochain défi :** {{ as_timestamp(next_event['phases']['reduction_start']) | timestamp_custom('%A, %p') }}
+  - **🕒 Période :** {{ next_event['period'] or 'Inconnu' }}
+  - **⚡ Phase en cours :** {{ states('sensor.defi_hilo') }}
+
+  ### Configuration de l'événement :
+  - **⚙️ Configurable :** {% if next_event['configurable'] %}✅ Oui{% else %}❌ Non{% endif %}
+  - **🙋 Participation :** {% if next_event['participating'] %}✅ Oui{% else %}❌ Non{% endif %}
+  - **🔢 Appareils totaux :** {{ next_event['total_devices'] or 'N/A' }}
+  - **🚫 Appareils exclus :** {{ next_event['opt_out_devices'] or 'N/A' }}
+  - **🔥 Appareils préchauffés :** {{ next_event['pre_heat_devices'] or 'N/A' }}
+  - **📊 Mode :** {{ next_event['mode'] or 'Inconnu' }}
+
+  ### Statistiques sur le défi en cours :
+  - **⚡ kWh permis :** {{ next_event['allowed_kWh'] or 'N/A' }} kWh
+  - **⚡ kWh utilisés :** {{ next_event['used_kWh'] or 'N/A' }} kWh
+  - **⚡ kWh non utilisés:** {{ (next_event.allowed_kWh - next_event.used_kWh) | round(2) if next_event.allowed_kWh is defined and next_event.used_kWh is defined else 'N/A' }} kWh
+  - **📉 Pourcentage utilisé :** {{ next_event['used_percentage'] or 'N/A' }} %
+  - **🏆 Récompense maximale :** {{ (next_event['allowed_kWh'] * 0.55) | round(2) if next_event['allowed_kWh'] else 'N/A' }} $
+  - **❌ Récompense non obtenue :** {{ (next_event['used_kWh'] * 0.55) | round(2) if next_event['used_kWh'] else 'N/A' }} $
+  - **💡 Récompense estimée :** {{ ((next_event['allowed_kWh'] - next_event['used_kWh']) * 0.55) | round(2) if next_event['allowed_kWh'] and next_event['used_kWh'] else 'N/A' }} $
+  
+
+
+   ## Statistique:
+
+  {%- set rewards = state_attr('sensor.recompenses_hilo', 'history') or [] -%}
+  {%- if rewards %}
+<table style="width: 100%; border-collapse: collapse; text-align: center;">
+      <thead>
+        <tr>
+          <th>Saison</th>
+          <th>Nb de défis</th>
+          <th>Récompense (Total)</th>
+          <th>Moyenne</th>
+          <th>Effacement (kWh)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {%- for entry in rewards %}
+          {%- set season = entry.season %}
+          {%- set total_reward_season = (entry.totalReward | default(0)) | round(2) %}
+          {%- set event_count = entry.events | length %}
+          {%- set total_energy_savings_season = entry.totalEnergySavingsWh | default(0) %}
+          {%- set effacement_season = (total_energy_savings_season / 1000) | round(2) %}
+          {%- if event_count > 0 %}
+            {%- set moyenne_season = (total_reward_season / event_count) | round(2) %}
+          {%- else %}
+            {%- set moyenne_season = 0 %}
+          {%- endif %}
+          <tr>
+            <td>{{ season }}</td>
+            <td>{{ event_count }}</td>
+            <td>{{ '%.2f'|format(total_reward_season) }} $</td>
+            <td>{{ '%.2f'|format(moyenne_season) }} $</td>
+            <td>{{ '%.2f'|format(effacement_season) }} kWh</td>
+          </tr>
+        {%- endfor %}
+        {%- set history = state_attr('sensor.recompenses_hilo', 'history') %}
+        {%- set total_events = history | map(attribute='events') | map('length') | sum %}
+        {%- set total_reward = history | map(attribute='totalReward') | sum %}
+        {%- set total_energy_savings_global = history | map(attribute='totalEnergySavingsWh') | sum %}
+        {%- if total_events > 0 %}
+          {%- set moyenne_global = (total_reward / total_events) | round(2) %}
+        {%- else %}
+          {%- set moyenne_global = 0 %}
+        {%- endif %}
+        <tr>
+          <td><strong>Total</strong></td>
+          <td><strong>{{ total_events }}</strong></td>
+          <td><strong>{{ '%.2f'|format(total_reward) }} $</strong></td>
+          <td><strong>{{ '%.2f'|format(moyenne_global) }} $</strong></td>
+          <td><strong>{{ '%.2f'|format(total_energy_savings_global / 1000) }} kWh</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  {%- else %}
+    <p>Aucune donnée disponible pour l'instant.</p>
+  {%- endif %}
+
+<br> 
+### Podium ###<br><br>
+{%- set rewards = state_attr('sensor.recompenses_hilo', 'history') or [] -%}
+{%- if rewards %}
+  {%- set ns = namespace(total_diff=0, largest_diff=None, smallest_diff=None, largest_event=None, smallest_event=None, event_count=0, total_used_kwh=0) -%}
+
+  {%- set jours = {
+    'Monday': 'lundi',
+    'Tuesday': 'mardi',
+    'Wednesday': 'mercredi',
+    'Thursday': 'jeudi',
+    'Friday': 'vendredi',
+    'Saturday': 'samedi',
+    'Sunday': 'dimanche'
+  } -%}
+
+  {%- set mois = {
+    'January': 'janvier',
+    'February': 'février',
+    'March': 'mars',
+    'April': 'avril',
+    'May': 'mai',
+    'June': 'juin',
+    'July': 'juillet',
+    'August': 'août',
+    'September': 'septembre',
+    'October': 'octobre',
+    'November': 'novembre',
+    'December': 'décembre'
+  } -%}
+
+  {%- for season_data in rewards %}
+    {%- for event in season_data.events %}
+      {%- set allowed_kWh = event.allowed_kWh | default(0) %}
+      {%- set used_kWh = event.used_kWh | default(0) %}
+      {%- set diff = allowed_kWh - used_kWh %}
+
+      {%- set ns.total_diff = ns.total_diff + diff %}
+      {%- set ns.event_count = ns.event_count + 1 %}
+      {%- set ns.total_used_kwh = ns.total_used_kwh + used_kWh %}
+
+      {%- if ns.largest_diff is none or diff >= ns.largest_diff %}
+        {%- set ns.largest_diff = diff %}
+        {%- set ns.largest_event = event %}
+      {%- endif %}
+
+      {%- if ns.smallest_diff is none or diff <= ns.smallest_diff %}
+        {%- set ns.smallest_diff = diff %}
+        {%- set ns.smallest_event = event %}
+      {%- endif %}
+    {%- endfor %}
+  {%- endfor %}
+
+  {%- if ns.largest_event and ns.smallest_event and ns.event_count > 0 %}
+    {%- set largest_date = as_datetime(ns.largest_event.phases.reduction_start) %}
+    {%- set smallest_date = as_datetime(ns.smallest_event.phases.reduction_start) %}
+<br>
+<table border="1" cellpadding="5" cellspacing="0">
+        <tr>
+            <th>Performance</th>
+            <th>Éffacement</th>
+            <th>Récompense</th>
+            <th>Date</th>
+        </tr>
+        <tr>
+            <td>Meilleure</td>
+            <td>{{ '%.2f'|format(ns.largest_diff) }} kWh</td>
+            <td>{{ '%.2f'|format(ns.largest_diff * 0.55) }} $</td>
+            <td>{{ jours[largest_date.strftime('%A')] }} {{ largest_date.strftime('%d') }} {{ mois[largest_date.strftime('%B')] }} {{ largest_date.strftime('%Y') }}</td>
+        </tr>
+        <tr>
+            <td>Pire</td>
+            <td>{{ '%.2f'|format(ns.smallest_diff) }} kWh</td>
+            <td>{{ '%.2f'|format(ns.smallest_diff * 0.55) }} $</td>
+            <td>{{ jours[smallest_date.strftime('%A')] }} {{ smallest_date.strftime('%d') }} {{ mois[smallest_date.strftime('%B')] }} {{ smallest_date.strftime('%Y') }}</td>
+        </tr>
+    </table>
+    <br>
+### Autres ###<br><br>
+Moyenne de l'effacement: <strong>{{ '%.2f'|format(ns.total_diff / ns.event_count) }} kWh</strong><br>
+Récompense perdu (Total): <strong>{{ '%.2f'|format(ns.total_used_kwh * 0.55) }} $</strong>.
+  {%- else %}
+    Aucune donnée de réduction disponible pour l'instant.<br>
+  {%- endif %}
+{%- else %}
+  Aucune donnée disponible pour l'instant.<br>
+{%- endif %}
+
+### Phases de l'événement (chronologie des phases) :
+ | **Phase**            | **Début**               | **Fin**                 |
+  |----------------------|-------------------------|--------------------------|
+  | ❄️ Pré-Cold          | {{ as_timestamp(next_event['phases']['pre_cold_start']) | timestamp_custom('%I:%M %p') }} | {{ as_timestamp(next_event['phases']['pre_cold_end']) | timestamp_custom('%I:%M %p') }} |
+  | 👍 Boost             | {{ as_timestamp(next_event['phases']['appreciation_start']) | timestamp_custom('%I:%M %p') }} | {{ as_timestamp(next_event['phases']['appreciation_end']) | timestamp_custom('%I:%M %p') }} |
+  | 🔥 Préchauffage      | {{ as_timestamp(next_event['phases']['preheat_start']) | timestamp_custom('%I:%M %p') }} | {{ as_timestamp(next_event['phases']['preheat_end']) | timestamp_custom('%I:%M %p') }} |
+  | 🛑 Réduction         | {{ as_timestamp(next_event['phases']['reduction_start']) | timestamp_custom('%I:%M %p') }} | {{ as_timestamp(next_event['phases']['reduction_end']) | timestamp_custom('%I:%M %p') }} |
+  | ♻️ Reprise    | {{ as_timestamp(next_event['phases']['recovery_start']) | timestamp_custom('%I:%M %p') }} | {{ as_timestamp(next_event['phases']['recovery_end']) | timestamp_custom('%I:%M %p') }} |
+
+
+  ### Dernière mise à jour 🕒
+  - **📅 Dernière mise à jour :** {{ elapsed }}
+{% else %}
+  ## 🚫 Aucun événement trouvé 🚫
+{% endif %}
